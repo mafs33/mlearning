@@ -1,0 +1,134 @@
+---
+title: "Predicting classe of exercise - Unilateral Dumbbell Biceps Curl"
+author: "Marcel Silva"
+date: "Sunday, july 26, 2016"
+output: html_document
+---
+Synopsis : the analisys intend to predict how good the person are doing the Unilateral Dumbbell Biceps Curl
+
+The data has a lot of variable. The response variable os "CLASSE".
+Its refer to a bunch of maners to do the do the exercise 
+Unilateral Dumbbell Biceps Curl. The classes are:
+A: exactly according to the specification (5.580 times in the dataset)
+B: throwing the elbows to the front (3.797 times in the dataset)
+C: lifting the dumbbell only halfway (3.422 times in the dataset)
+D: lowering the dumbbell only halfway (3.216 times in the dataset)
+E: throwing the hips to the front (3.607 times in the dataset)
+
+We intend to predict witch class of the exercise the person performed
+For this we will use the data with the collected variables from devices
+that colected the position, frequecy and other data about the exercises, during
+the execution.
+
+
+Data processing
+===============
+
+Downloading the data and loading the librarys:
+```{r cache = TRUE}
+library(rpart)
+library(AppliedPredictiveModeling)
+library(ElemStatLearn)
+library(caret)
+library(MASS)
+library(ggplot2)
+library(randomForest)
+
+trndata <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", header=TRUE) # valid
+tstdata <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", header=TRUE) # valid
+```
+
+Some descriptions about the dataset
+```{r}
+summary(trndata)
+```
+
+To develop the model we will take a training and a test database
+from the training (trndata) data gave to us. In the test data (tstdata) we saw above
+there are not a response variable, thats the reason why we will take a part
+of the training data to test the model
+
+```{r}
+set.seed(3523)
+
+inTrain = createDataPartition(trndata$classe, p = 3/4)[[1]]
+
+training = trndata[ inTrain,]
+
+testing = trndata[-inTrain,]
+
+```
+The dataset is very big, with a lot of variable. Some of then have missing values, so, lets clean the dataset:
+
+```{r}
+training <-training[, colSums(is.na(training)) == 0] 
+testing <- testing[, colSums(is.na(testing)) == 0]
+```
+
+droping some coloumns to clean the database:
+```{r}
+cltraining <- names(training) %in% c("X", "user_name", "new_window", "kurtosis_roll_belt", "kurtosis_picth_belt",
+                                     "kurtosis_yaw_belt", "skewness_roll_belt", "skewness_roll_belt.1", "skewness_yaw_belt",
+                                     "max_yaw_belt", "min_yaw_belt", "amplitude_yaw_belt", "avg_roll_arm", "stddev_roll_arm",
+                                     "var_roll_arm", "avg_pitch_arm", "stddev_pitch_arm", "var_pitch_arm", "avg_yaw_arm",
+                                     "stddev_yaw_arm", "var_yaw_arm", "kurtosis_roll_arm", "kurtosis_picth_arm",
+                                     "kurtosis_yaw_arm", "skewness_roll_arm", "skewness_pitch_arm", "skewness_yaw_arm",
+                                     "max_roll_arm", "min_roll_arm", "min_pitch_arm", "amplitude_roll_arm", "amplitude_pitch_arm",
+                                     "kurtosis_roll_dumbbell", "kurtosis_picth_dumbbell", "kurtosis_yaw_dumbbell", "skewness_roll_dumbbell",
+                                     "skewness_pitch_dumbbell", "skewness_yaw_dumbbell", "max_yaw_dumbbell", "min_yaw_dumbbell",
+                                     "amplitude_yaw_dumbbell", "kurtosis_roll_forearm", "kurtosis_picth_forearm", "kurtosis_yaw_forearm",
+                                     "skewness_roll_forearm", "skewness_pitch_forearm", "skewness_yaw_forearm", "max_roll_forearm",
+                                     "max_yaw_forearm", "min_roll_forearm", "min_yaw_forearm", "amplitude_roll_forearm",
+                                     "amplitude_yaw_forearm", "avg_roll_forearm", "stddev_roll_forearm", "var_roll_forearm",
+                                     "avg_pitch_forearm", "stddev_pitch_forearm", "var_pitch_forearm", "avg_yaw_forearm",
+                                     "stddev_yaw_forearm", "var_yaw_forearm")
+training <- training[!cltraining]
+
+cltesting <- names(testing) %in% c("X", "user_name", "new_window", "kurtosis_roll_belt", "kurtosis_picth_belt",
+                                   "kurtosis_yaw_belt", "skewness_roll_belt", "skewness_roll_belt.1", "skewness_yaw_belt",
+                                   "max_yaw_belt", "min_yaw_belt", "amplitude_yaw_belt", "avg_roll_arm", "stddev_roll_arm",
+                                   "var_roll_arm", "avg_pitch_arm", "stddev_pitch_arm", "var_pitch_arm", "avg_yaw_arm",
+                                   "stddev_yaw_arm", "var_yaw_arm", "kurtosis_roll_arm", "kurtosis_picth_arm",
+                                   "kurtosis_yaw_arm", "skewness_roll_arm", "skewness_pitch_arm", "skewness_yaw_arm",
+                                   "max_roll_arm", "min_roll_arm", "min_pitch_arm", "amplitude_roll_arm", "amplitude_pitch_arm",
+                                   "kurtosis_roll_dumbbell", "kurtosis_picth_dumbbell", "kurtosis_yaw_dumbbell", "skewness_roll_dumbbell",
+                                   "skewness_pitch_dumbbell", "skewness_yaw_dumbbell", "max_yaw_dumbbell", "min_yaw_dumbbell",
+                                   "amplitude_yaw_dumbbell", "kurtosis_roll_forearm", "kurtosis_picth_forearm", "kurtosis_yaw_forearm",
+                                   "skewness_roll_forearm", "skewness_pitch_forearm", "skewness_yaw_forearm", "max_roll_forearm",
+                                   "max_yaw_forearm", "min_roll_forearm", "min_yaw_forearm", "amplitude_roll_forearm",
+                                   "amplitude_yaw_forearm", "avg_roll_forearm", "stddev_roll_forearm", "var_roll_forearm",
+                                   "avg_pitch_forearm", "stddev_pitch_forearm", "var_pitch_forearm", "avg_yaw_forearm",
+                                   "stddev_yaw_forearm", "var_yaw_forearm")
+testing <- testing[!cltesting]
+```
+
+Now, we start to make the models to predict from the dependent variables
+the outcome: Classe
+The first model will be a random forest model:
+```{r}
+mod1 <- randomForest(classe ~ ., data = training)
+```
+
+then a boosted regression tree:
+```{r}
+mod2 <- rpart(classe ~ ., method="class", data = training)
+```
+
+loading the prediction:
+```{r}
+pred1 <- predict(mod1, testing)
+pred2 <- predict(mod2, testing, type = "class")
+```
+
+constructing the confusion matrix to compare the results:
+```{r}
+cfM1 <- confusionMatrix(pred1, testing$classe)
+cfM1
+cfM2 <- confusionMatrix(pred2, testing$classe)
+cfM2
+```
+
+We will use the model random forest because it has the biggest accuracy
+the cross validation was used to compare all the models and decide it one
+was the best to predict the 'classe' variable.
+With these variables I expect a low error in the out of sample test.
